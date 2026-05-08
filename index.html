@@ -11,6 +11,9 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- HTML to PDF Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" xintegrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
         body { 
@@ -18,12 +21,9 @@
             /* 한글 단어 끊김 방지 */
             word-break: keep-all; 
         }
-        @media print {
-            body { background-color: white; -webkit-print-color-adjust: exact; }
-            .print-shadow-none { box-shadow: none !important; }
-            .print-bg-white { background-color: white !important; }
-            .page-break-avoid { page-break-inside: avoid; }
-            .print-hidden { display: none !important; }
+        /* PDF 생성 시 잘림 방지용 CSS */
+        .page-break-avoid { 
+            page-break-inside: avoid; 
         }
     </style>
 </head>
@@ -40,8 +40,11 @@
         const SaveIcon = ({ size = 16 }) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
         );
-        const PrinterIcon = ({ size = 16 }) => (
-            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+        const DownloadIcon = ({ size = 16 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        );
+        const LoaderIcon = ({ size = 16 }) => (
+            <svg className="animate-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
         );
         const PlusIcon = ({ size = 14 }) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -52,6 +55,7 @@
 
         function App() {
             const [isEditing, setIsEditing] = useState(false);
+            const [isDownloading, setIsDownloading] = useState(false); // PDF 다운로드 상태 추가
 
             const [reportData, setReportData] = useState({
                 date: "2026년 5월 14일",
@@ -109,72 +113,68 @@
                 ]
             });
 
-            const handleChange = (field, value) => {
-                setReportData(prev => ({ ...prev, [field]: value }));
-            };
-
+            // 값 변경 핸들러
+            const handleChange = (field, value) => setReportData(prev => ({ ...prev, [field]: value }));
             const handleQnaChange = (id, field, value) => {
-                setReportData(prev => ({
-                    ...prev,
-                    qna: prev.qna.map(item => item.id === id ? { ...item, [field]: value } : item)
-                }));
+                setReportData(prev => ({ ...prev, qna: prev.qna.map(item => item.id === id ? { ...item, [field]: value } : item) }));
             };
-
             const addQna = () => {
                 const newId = reportData.qna.length > 0 ? Math.max(...reportData.qna.map(q => q.id)) + 1 : 1;
-                setReportData(prev => ({
-                    ...prev,
-                    qna: [...prev.qna, { id: newId, title: "", question: "", answer: "" }]
-                }));
+                setReportData(prev => ({ ...prev, qna: [...prev.qna, { id: newId, title: "", question: "", answer: "" }] }));
             };
-
-            const removeQna = (id) => {
-                setReportData(prev => ({
-                    ...prev,
-                    qna: prev.qna.filter(item => item.id !== id)
-                }));
-            };
-
+            const removeQna = (id) => setReportData(prev => ({ ...prev, qna: prev.qna.filter(item => item.id !== id) }));
             const handleSentimentCommentChange = (index, value) => {
                 const newComments = [...reportData.sentimentComments];
                 newComments[index] = value;
                 setReportData(prev => ({ ...prev, sentimentComments: newComments }));
             };
-
-            const addSentimentComment = () => {
-                setReportData(prev => ({ ...prev, sentimentComments: [...prev.sentimentComments, ""] }));
-            };
-
+            const addSentimentComment = () => setReportData(prev => ({ ...prev, sentimentComments: [...prev.sentimentComments, ""] }));
             const removeSentimentComment = (index) => {
                 const newComments = [...reportData.sentimentComments];
                 newComments.splice(index, 1);
                 setReportData(prev => ({ ...prev, sentimentComments: newComments }));
             };
-
             const handleActionItemChange = (id, field, value) => {
-                setReportData(prev => ({
-                    ...prev,
-                    actionItems: prev.actionItems.map(item => item.id === id ? { ...item, [field]: value } : item)
-                }));
+                setReportData(prev => ({ ...prev, actionItems: prev.actionItems.map(item => item.id === id ? { ...item, [field]: value } : item) }));
             };
-
             const addActionItem = () => {
                 const newId = reportData.actionItems.length > 0 ? Math.max(...reportData.actionItems.map(a => a.id)) + 1 : 1;
-                setReportData(prev => ({
-                    ...prev,
-                    actionItems: [...prev.actionItems, { id: newId, category: "", content: "" }]
-                }));
+                setReportData(prev => ({ ...prev, actionItems: [...prev.actionItems, { id: newId, category: "", content: "" }] }));
             };
+            const removeActionItem = (id) => setReportData(prev => ({ ...prev, actionItems: prev.actionItems.filter(item => item.id !== id) }));
 
-            const removeActionItem = (id) => {
-                setReportData(prev => ({
-                    ...prev,
-                    actionItems: prev.actionItems.filter(item => item.id !== id)
-                }));
-            };
+            // PDF 다운로드 함수 (html2pdf 적용)
+            const handleDownloadPdf = () => {
+                setIsDownloading(true); // 로딩 표시 시작
+                
+                // 만약 수정 모드라면, 강제로 보기 모드로 변경한 뒤 캡처 진행
+                const wasEditing = isEditing;
+                if (isEditing) setIsEditing(false);
 
-            const handlePrint = () => {
-                window.print();
+                // 상태가 반영될 수 있도록 아주 짧은 지연 후 캡처 실행
+                setTimeout(() => {
+                    const element = document.getElementById('pdf-content');
+                    
+                    const opt = {
+                        margin:       [10, 10, 10, 10], // 상, 좌, 하, 우 여백 (mm)
+                        filename:     `${reportData.institution}_IR미팅보고서.pdf`,
+                        image:        { type: 'jpeg', quality: 1.0 },
+                        html2canvas:  { 
+                            scale: 2,           // 해상도 2배 (선명도 확보)
+                            useCORS: true,      // 외부 폰트/이미지 로드 허용
+                            windowWidth: 1024   // 모바일 등 좁은 화면에서도 PC버전 너비로 고정 캡처
+                        },
+                        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                        // page-break-avoid 클래스가 있는 부분에서 잘리지 않도록 보호
+                        pagebreak:    { mode: ['css', 'legacy'] } 
+                    };
+
+                    // pdf 생성 및 다운로드
+                    html2pdf().set(opt).from(element).save().then(() => {
+                        setIsDownloading(false); // 로딩 종료
+                        if (wasEditing) setIsEditing(true); // 캡처가 끝나면 원래 수정 모드로 복귀
+                    });
+                }, 300);
             };
 
             const inputClass = "w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all";
@@ -182,22 +182,26 @@
 
             return (
                 <div className="font-sans">
-                    <div className="fixed top-4 right-4 sm:top-8 sm:right-8 flex gap-2 z-50 print-hidden shadow-xl rounded-full bg-white p-2 border border-gray-200">
+                    {/* 상단 컨트롤 패널 (인쇄/다운로드 시에는 이 영역은 제외됨) */}
+                    <div className="fixed top-4 right-4 sm:top-8 sm:right-8 flex gap-2 z-50 shadow-xl rounded-full bg-white p-2 border border-gray-200">
                         <button
                             onClick={() => setIsEditing(!isEditing)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-colors ${isEditing ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            disabled={isDownloading}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-colors ${isEditing ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} ${isDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             {isEditing ? <><SaveIcon size={16} /> 저장 및 미리보기</> : <><Edit2Icon size={16} /> 수정 모드</>}
                         </button>
                         <button
-                            onClick={handlePrint}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm bg-slate-800 text-white hover:bg-slate-900 transition-colors"
+                            onClick={handleDownloadPdf}
+                            disabled={isDownloading}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm text-white transition-colors ${isDownloading ? 'bg-slate-500 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-900'}`}
                         >
-                            <PrinterIcon size={16} /> PDF 인쇄
+                            {isDownloading ? <><LoaderIcon size={16} /> 생성 중...</> : <><DownloadIcon size={16} /> PDF 저장</>}
                         </button>
                     </div>
 
-                    <div className={`max-w-4xl mx-auto bg-white rounded-xl shadow-lg print-shadow-none p-8 sm:p-12 border ${isEditing ? 'border-blue-400 ring-4 ring-blue-50' : 'border-gray-200'} transition-all duration-300`}>
+                    {/* PDF로 변환될 실제 영역 (id="pdf-content") */}
+                    <div id="pdf-content" className={`max-w-4xl mx-auto bg-white rounded-xl ${isEditing ? 'border-blue-400 ring-4 ring-blue-50 border shadow-lg' : ''} p-8 sm:p-12 transition-all duration-300`}>
                         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-2 border-slate-800 pb-6 mb-8">
                             <div>
                                 <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
