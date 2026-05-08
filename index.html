@@ -27,7 +27,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 py-8 px-4 sm:px-8 break-keep">
+<body class="bg-gray-100 text-gray-800 py-8 px-4 sm:px-8 break-keep relative">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -57,7 +57,7 @@
             const [isEditing, setIsEditing] = useState(false);
             const [isDownloading, setIsDownloading] = useState(false);
 
-            // 보고서 전체 데이터 (그로쓰리서치 내용 복구 완료)
+            // 보고서 전체 데이터
             const [reportData, setReportData] = useState({
                 date: "2026년 5월 14일",
                 author: "공시IR팀 이성태 차장",
@@ -144,7 +144,7 @@
             };
             const removeActionItem = (id) => setReportData(prev => ({ ...prev, actionItems: prev.actionItems.filter(item => item.id !== id) }));
 
-            // PDF 다운로드 함수 (화면 크기 그대로 통짜 1장짜리 PDF 생성)
+            // 완벽한 1장짜리 PDF 다운로드 (가로 밀림 100% 방지 로직)
             const handleDownloadPdf = () => {
                 setIsDownloading(true);
                 
@@ -152,44 +152,57 @@
                 if (isEditing) setIsEditing(false);
 
                 setTimeout(() => {
+                    // 1. 현재 스크롤 위치 저장 후 맨 위로 강제 이동 (스크롤에 의한 상단 잘림 방지)
+                    const currentScrollY = window.scrollY;
+                    window.scrollTo(0, 0);
+
                     const element = document.getElementById('pdf-content');
                     
-                    // 화면 크기에 상관없이 항상 일정한 너비로 캡처하기 위해 임시 고정
-                    const originalWidth = element.style.width;
-                    const originalMaxWidth = element.style.maxWidth;
-                    const originalMargin = element.style.margin;
+                    // 2. 원래 스타일 백업
+                    const originalClass = element.className;
+                    const originalStyle = element.getAttribute('style') || '';
                     
-                    element.style.width = '1000px';
-                    element.style.maxWidth = '1000px';
-                    element.style.margin = '0 auto';
+                    // 3. 캡처용 절대 레이아웃 적용
+                    // mx-auto(중앙정렬)를 없애고 화면 최상단 좌측(0,0)에 절대 위치로 고정시킵니다.
+                    // 이렇게 하면 부모 요소의 여백(padding)에 영향받지 않고 완벽하게 캡처됩니다.
+                    element.classList.remove('mx-auto', 'max-w-4xl');
+                    element.style.width = '1000px';      // 데스크탑 너비 고정
+                    element.style.margin = '0';          // 마진 완벽 제거
+                    element.style.position = 'absolute'; // 최좌측 상단으로 이동
+                    element.style.top = '0';
+                    element.style.left = '0';
+                    element.style.zIndex = '9999';       // 다른 요소 위로 띄움
 
-                    // 💡 A4 규격 대신, 현재 웹 화면의 실제 너비와 높이를 픽셀로 측정
-                    const w = element.offsetWidth;
-                    const h = element.offsetHeight;
+                    setTimeout(() => {
+                        const w = element.offsetWidth;
+                        const h = element.offsetHeight;
 
-                    const opt = {
-                        margin:       0, // 보고서 자체의 여백(padding)을 그대로 사용
-                        filename:     `${reportData.institution}_IR미팅보고서.pdf`,
-                        image:        { type: 'jpeg', quality: 1.0 },
-                        html2canvas:  { 
-                            scale: 2,
-                            useCORS: true,
-                            windowWidth: 1024 
-                        },
-                        // 💡 A4 포맷을 버리고, 실제 웹 요소의 픽셀 크기[w, h]를 1장짜리 통짜 페이지로 설정
-                        jsPDF:        { unit: 'px', format: [w, h], orientation: 'portrait' } 
-                    };
+                        const opt = {
+                            margin: 0,
+                            filename: `${reportData.institution}_IR미팅보고서.pdf`,
+                            image: { type: 'jpeg', quality: 1.0 },
+                            html2canvas: { 
+                                scale: 2,           // 고해상도 처리
+                                useCORS: true,
+                                width: w,           // 캡처 영역 너비 강제 고정
+                                height: h,          // 캡처 영역 높이 강제 고정
+                                windowWidth: 1000   // 브라우저 너비 인식 고정
+                            },
+                            // A4를 무시하고 렌더링된 세로 길이 통째로 1장의 PDF 규격으로 설정
+                            jsPDF: { unit: 'px', format: [w, h], orientation: 'portrait' } 
+                        };
 
-                    html2pdf().set(opt).from(element).save().then(() => {
-                        // 캡처 완료 후 스타일 원상 복구
-                        element.style.width = originalWidth;
-                        element.style.maxWidth = originalMaxWidth;
-                        element.style.margin = originalMargin;
+                        html2pdf().set(opt).from(element).save().then(() => {
+                            // 4. PDF 생성 완료 후 모든 스타일 원상 복구
+                            element.className = originalClass;
+                            element.setAttribute('style', originalStyle);
+                            window.scrollTo(0, currentScrollY); // 스크롤 원래대로
 
-                        setIsDownloading(false);
-                        if (wasEditing) setIsEditing(true);
-                    });
-                }, 300);
+                            setIsDownloading(false);
+                            if (wasEditing) setIsEditing(true);
+                        });
+                    }, 300); // 레이아웃 재계산 시간 대기
+                }, 100);
             };
 
             const inputClass = "w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all";
@@ -197,7 +210,7 @@
 
             return (
                 <div className="font-sans">
-                    {/* 상단 컨트롤 패널 (인쇄/다운로드 시에는 이 영역은 제외됨) */}
+                    {/* 상단 컨트롤 패널 */}
                     <div className="fixed top-4 right-4 sm:top-8 sm:right-8 flex gap-2 z-50 shadow-xl rounded-full bg-white p-2 border border-gray-200">
                         <button
                             onClick={() => setIsEditing(!isEditing)}
@@ -215,7 +228,7 @@
                         </button>
                     </div>
 
-                    {/* PDF로 변환될 실제 영역 (id="pdf-content") */}
+                    {/* PDF로 변환될 실제 영역 */}
                     <div id="pdf-content" className={`max-w-4xl mx-auto bg-white rounded-xl ${isEditing ? 'border-blue-400 ring-4 ring-blue-50 border shadow-lg' : ''} p-8 sm:p-12 transition-all duration-300`}>
                         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b-2 border-slate-800 pb-6 mb-8">
                             <div>
