@@ -144,7 +144,7 @@
             };
             const removeActionItem = (id) => setReportData(prev => ({ ...prev, actionItems: prev.actionItems.filter(item => item.id !== id) }));
 
-            // 완벽한 1장짜리 PDF 다운로드 (가로 밀림 100% 방지 로직)
+            // 완벽한 1장짜리 PDF 다운로드 (좌측 잘림 및 가로 밀림 방지 로직)
             const handleDownloadPdf = () => {
                 setIsDownloading(true);
                 
@@ -152,33 +152,36 @@
                 if (isEditing) setIsEditing(false);
 
                 setTimeout(() => {
-                    // 1. 현재 스크롤 위치 저장 후 맨 위로 강제 이동 (스크롤에 의한 상단 잘림 방지)
                     const currentScrollY = window.scrollY;
+                    const currentScrollX = window.scrollX;
                     window.scrollTo(0, 0);
 
                     const element = document.getElementById('pdf-content');
                     
-                    // 2. 원래 스타일 백업
+                    // 원래 스타일 백업
                     const originalClass = element.className;
                     const originalStyle = element.getAttribute('style') || '';
                     
-                    // 3. 캡처용 절대 레이아웃 적용
-                    // mx-auto(중앙정렬)를 없애고 화면 최상단 좌측(0,0)에 절대 위치로 고정시킵니다.
-                    // 이렇게 하면 부모 요소의 여백(padding)에 영향받지 않고 완벽하게 캡처됩니다.
+                    // body 태그의 패딩이 html2canvas 렌더링 영역에 영향을 미쳐 
+                    // 왼쪽이 잘려 나가는 것을 막기 위해 임시로 body의 여백을 0으로 만듭니다.
+                    const body = document.body;
+                    const originalBodyStyle = body.getAttribute('style') || '';
+                    body.style.padding = '0';
+                    body.style.margin = '0';
+                    
+                    // 캡처용 절대 레이아웃 대신, 문서 흐름을 유지하며 너비만 고정합니다.
+                    // 강제 absolute 포지셔닝이 기준점 이탈의 주 원인이므로 이를 제거합니다.
                     element.classList.remove('mx-auto', 'max-w-4xl');
                     element.style.width = '1000px';      // 데스크탑 너비 고정
-                    element.style.margin = '0';          // 마진 완벽 제거
-                    element.style.position = 'absolute'; // 최좌측 상단으로 이동
-                    element.style.top = '0';
-                    element.style.left = '0';
-                    element.style.zIndex = '9999';       // 다른 요소 위로 띄움
+                    element.style.maxWidth = 'none';
+                    element.style.margin = '0';
 
                     setTimeout(() => {
                         const w = element.offsetWidth;
                         const h = element.offsetHeight;
 
                         const opt = {
-                            margin: 0,
+                            margin: [0, 0, 0, 0],
                             filename: `${reportData.institution}_IR미팅보고서.pdf`,
                             image: { type: 'jpeg', quality: 1.0 },
                             html2canvas: { 
@@ -186,17 +189,21 @@
                                 useCORS: true,
                                 width: w,           // 캡처 영역 너비 강제 고정
                                 height: h,          // 캡처 영역 높이 강제 고정
-                                windowWidth: 1000   // 브라우저 너비 인식 고정
+                                windowWidth: w + 20,// 여유 확보
+                                scrollX: 0,         // 스크롤 영향 무시
+                                scrollY: 0
                             },
                             // A4를 무시하고 렌더링된 세로 길이 통째로 1장의 PDF 규격으로 설정
                             jsPDF: { unit: 'px', format: [w, h], orientation: 'portrait' } 
                         };
 
                         html2pdf().set(opt).from(element).save().then(() => {
-                            // 4. PDF 생성 완료 후 모든 스타일 원상 복구
+                            // PDF 생성 완료 후 모든 스타일 원상 복구
                             element.className = originalClass;
                             element.setAttribute('style', originalStyle);
-                            window.scrollTo(0, currentScrollY); // 스크롤 원래대로
+                            body.setAttribute('style', originalBodyStyle);
+                            
+                            window.scrollTo(currentScrollX, currentScrollY);
 
                             setIsDownloading(false);
                             if (wasEditing) setIsEditing(true);
